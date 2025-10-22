@@ -1,0 +1,14 @@
+# Requirements for DMARC RUA/RUF Exploit Analyzer
+# Projet académique - Analyse de sécurité DMARC
+
+# DNS queries
+dnspython>=2.4.0
+
+# Tranco list integration (official library)
+tranco>=0.7.0
+
+# HTTP requests (dependency of tranco)
+requests>=2.31.0
+
+# All other modules use Python standard library:
+# - csv, json, argparse, zipfile, ssl, io, typing, datetime, sys, re, os
