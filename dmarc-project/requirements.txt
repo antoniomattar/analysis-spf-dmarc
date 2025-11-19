@@ -1,5 +1,5 @@
-# Requirements for DMARC RUA/RUF Exploit Analyzer
-# Projet académique - Analyse de sécurité DMARC
+# Requirements for SPF & DMARC Security Analyzer
+# Projet académique - Analyse de sécurité complète
 
 # DNS queries
 dnspython>=2.4.0
@@ -12,3 +12,4 @@ requests>=2.31.0
 
 # All other modules use Python standard library:
 # - csv, json, argparse, zipfile, ssl, io, typing, datetime, sys, re, os
+# - dataclasses, enum

@@ -1,0 +1,8 @@
+# Liste de domaines pour tests
+# Un domaine par ligne - lignes commençant par # sont ignorées
+
+google.com
+facebook.com
+github.com
+microsoft.com
+example.com
