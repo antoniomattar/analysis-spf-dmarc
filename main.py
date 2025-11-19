@@ -22,12 +22,12 @@ import sys
 from typing import List, Dict
 from datetime import datetime
 
-from tranco_fetcher import fetch_tranco_list, load_domains_from_file
-from dmarc_analyzer import analyze_dmarc_security
-from exploit_detector import ExploitDetector
-from spf_analyzer import SPFAnalyzer
-from attack_detector import AttackDetector
-from risk_score import RiskScoreCalculator
+from src.utils.tranco_fetcher import fetch_tranco_list, load_domains_from_file
+from src.analyzers.dmarc_analyzer import analyze_dmarc_security
+from src.detectors.exploit_detector import ExploitDetector
+from src.analyzers.spf_analyzer import SPFAnalyzer
+from src.detectors.attack_detector import AttackDetector
+from src.utils.risk_score import RiskScoreCalculator
 
 
 def print_banner():

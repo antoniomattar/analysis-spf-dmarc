@@ -340,7 +340,7 @@ class RiskScoreCalculator:
             ruf_domains = dmarc_result.get('ruf_domains', [])
 
             if rua_domains or ruf_domains:
-                from dmarc_analyzer import get_organizational_domain
+                from ..analyzers.dmarc_analyzer import get_organizational_domain
                 main_org = get_organizational_domain(dmarc_result['domain'])
 
                 external_rua = [
@@ -564,16 +564,17 @@ if __name__ == '__main__':
     print("="*70)
 
     # Import pour tests
-    from spf_analyzer import analyze_spf
-    from dmarc_analyzer import analyze_dmarc_security
-    from attack_detector import AttackDetector
+    from ..analyzers.spf_analyzer import SPFAnalyzer
+    from ..analyzers.dmarc_analyzer import analyze_dmarc_security
+    from ..detectors.attack_detector import AttackDetector
 
     test_domains = ['example.com', 'google.com']
 
     for domain in test_domains:
         print(f"\n📊 Risk Score pour {domain}")
 
-        spf = analyze_spf(domain)
+        spf_analyzer = SPFAnalyzer()
+        spf = spf_analyzer.analyze_domain(domain)
         dmarc = analyze_dmarc_security(domain)
         attacks = AttackDetector.detect_targeted_attack(domain, spf, dmarc)
 

@@ -3,11 +3,17 @@
 Script de test rapide pour valider le système complet
 """
 
+from src.utils.risk_score import RiskScoreCalculator
+from src.detectors.attack_detector import AttackDetector
+from src.analyzers.dmarc_analyzer import analyze_dmarc_security
+from src.analyzers.spf_analyzer import SPFAnalyzer
 import sys
-from spf_analyzer import SPFAnalyzer
-from dmarc_analyzer import analyze_dmarc_security
-from attack_detector import AttackDetector
-from risk_score import RiskScoreCalculator
+import os
+
+# Ajouter le répertoire parent au PYTHONPATH AVANT les imports
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 
 def test_domain(domain: str):
