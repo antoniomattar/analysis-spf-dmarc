@@ -10,6 +10,10 @@ tranco>=0.7.0
 # HTTP requests (dependency of tranco)
 requests>=2.31.0
 
+# SPF and DMARC parsing libraries
+dmarc==1.1.3
+pyspf==2.0.14
+
 # All other modules use Python standard library:
 # - csv, json, argparse, zipfile, ssl, io, typing, datetime, sys, re, os
 # - dataclasses, enum
