@@ -574,6 +574,8 @@ def save_row(writer: csv.DictWriter, row: Dict[str, str], file_handle):
     """
     writer.writerow(row)
     file_handle.flush()
+    # Force OS-level sync to ensure data is written to disk
+    os.fsync(file_handle.fileno())
 
 
 # ============================================================================
@@ -639,10 +641,14 @@ def run_analysis(input_csv: str, output_csv: str, from_ip: str, helo: str,
 
                     processed_count += 1
 
-                    # Log progress every 10 domains
+                    # Log progress every 5 domains with save confirmation
                     if processed_count % 10 == 0:
                         logging.info(
-                            f"Progress: {processed_count} domains processed, {skipped_count} skipped")
+                            f"Progress: {processed_count} domains processed, {skipped_count} skipped (saved to disk)")
+                    elif processed_count % 5 == 0:
+                        # More frequent brief updates
+                        logging.info(
+                            f"Processed {processed_count} domains (auto-saved)...")
 
                     # Optional throttling
                     if sleep_seconds > 0:
