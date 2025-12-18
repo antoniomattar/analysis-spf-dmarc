@@ -22,15 +22,13 @@ import csv
 import dns.resolver
 import dns.exception
 import spf
-import socket
 import argparse
 import os
 import logging
 import sys
 from time import sleep
 from typing import Dict, List, Set, Tuple, Optional
-from dataclasses import dataclass, asdict
-from datetime import datetime
+from dataclasses import dataclass
 
 
 # ============================================================================
