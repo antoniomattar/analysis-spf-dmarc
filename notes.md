@@ -20,7 +20,12 @@ Test script to send email from local machine using sendmail command:
 
 ```bash
 printf "From: admin@office.com
-Subject: Test Email
-This is a test email.
+Subject: Educational SPF/DMARC Analysis
+This is a test email for educational purposes of SPF and DMARC analysis.
 Email was sent at $(date)." | sendmail -v -f admin@office.com antonio.mattar@grenoble-inp.org
 ```
+
+python3 domain_analyzer.py -i data/top-1m.csv -o results-vps-anto.csv \                                                                                                           ─╯
+  --from-ip 51.77.245.91 --helo vps-14906709
+
+python3 domain_classifier.py -i output/results-vps-anto.csv --export-all

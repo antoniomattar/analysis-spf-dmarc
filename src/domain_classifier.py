@@ -208,10 +208,28 @@ def export_classification_group(domains: List[Dict], output_file: str,
         return
 
     try:
+        # Collect all unique fieldnames from all domains, excluding None
+        all_fieldnames = set()
+        for domain in domains:
+            all_fieldnames.update(k for k in domain.keys() if k is not None)
+
+        # Sort fieldnames for consistent ordering
+        fieldnames = sorted(all_fieldnames)
+
+        # Clean domains: remove None keys and ensure all have same fields
+        cleaned_domains = []
+        for domain in domains:
+            cleaned_domain = {k: v for k, v in domain.items() if k is not None}
+            # Add missing fields with empty values
+            for field in fieldnames:
+                if field not in cleaned_domain:
+                    cleaned_domain[field] = ''
+            cleaned_domains.append(cleaned_domain)
+
         with open(output_file, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=domains[0].keys())
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(domains)
+            writer.writerows(cleaned_domains)
 
         print(f"✓ Exported {len(domains)} domains to: {output_file}")
 
