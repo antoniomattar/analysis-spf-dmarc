@@ -1,0 +1,2 @@
+Domain_to_be_spoofed,dmarc_policy,dmarc_rua,dmarc_ruf,dns_lookup_count,from_ip,has_include,has_ptr,its_dmarc_record,its_spf_record,spf_check_result_flag,unregistered_domain_in_include,what_happened
+thuvienphapluat.vn,none,"mailto:850082fa98044f458c273c155fe46b8b@dmarc-reports.cloudflare.net,mailto:admin@thuvienphapluat.vn",None,4,51.77.245.91,True,False,"v=DMARC1; p=none; rua=mailto:850082fa98044f458c273c155fe46b8b@dmarc-reports.cloudflare.net,mailto:admin@thuvienphapluat.vn",v=spf1 include:amazonses.com include:_spf.google.com all,pass,None,

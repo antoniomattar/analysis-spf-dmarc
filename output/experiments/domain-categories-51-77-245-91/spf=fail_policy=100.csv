@@ -1,0 +1,2 @@
+Domain_to_be_spoofed,dmarc_policy,dmarc_rua,dmarc_ruf,dns_lookup_count,from_ip,has_include,has_ptr,its_dmarc_record,its_spf_record,spf_check_result_flag,unregistered_domain_in_include,what_happened
+nr-ops.net,100,mailto:rukavvyb@ag.dmarcian.com,None,2,51.77.245.91,True,False,v=DMARC1; p=100; rua=mailto:rukavvyb@ag.dmarcian.com;,v=spf1 include:sendgrid.net -all,fail,None,

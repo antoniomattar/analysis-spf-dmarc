@@ -1,0 +1,2 @@
+Domain_to_be_spoofed,dmarc_policy,dmarc_rua,dmarc_ruf,dns_lookup_count,from_ip,has_include,has_ptr,its_dmarc_record,its_spf_record,spf_check_result_flag,unregistered_domain_in_include,what_happened
+gupy.io,quarentine,mailto:seguranca@gupy.com.br,None,4,51.77.245.91,True,False,v=DMARC1; p=quarentine; rua=mailto:seguranca@gupy.com.br;,v=spf1 include:spf.umbler.com -all,fail,None,
