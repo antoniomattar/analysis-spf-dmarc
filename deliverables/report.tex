@@ -1,0 +1,1448 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+
+\geometry{margin=2.5cm}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{gray!10},
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+    columns=fullflexible
+}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+\title{\textbf{Email Authentication Mechanisms:\\Attack Vectors and Provider Behavior Analysis}}
+\author{
+    Antonio MATTAR \and Romain STABLO \and Matheo DUPIAT\\[1em]
+    \small Grenoble INP
+}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This report presents experimental results from testing email authentication edge cases across multiple mail providers. We evaluate SPF, DKIM, DMARC, and ARC handling under various misconfigurations and attack scenarios. Results reveal inconsistent enforcement and potential spoofing vectors.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{Introduction}
+%==============================================================================
+
+Email authentication relies on SPF, DKIM, and DMARC to prevent sender spoofing. Despite standardization (RFC 7208, RFC 6376, RFC 7489), provider implementations vary significantly. Prior work~\cite{hu2018endtoend,chen2020composition,shen2021weaklinks} demonstrated that spoofing remains possible through protocol edge cases and UI inconsistencies.
+
+This study tests \textbf{25 attack scenarios} against 14 receiving providers:
+\begin{itemize}[noitemsep]
+    \item Gmail, iCloud, Yahoo, Outlook, AOL
+    \item ProtonMail, Fastmail, Tutamail, Zoho
+    \item GMX, Mail.ru, Laposte, Mail.com
+    \item Grenoble INP Mail
+\end{itemize}
+
+\noindent\textbf{Goals:}
+\begin{enumerate}[noitemsep]
+    \item Document provider-specific authentication behaviors
+    \item Identify exploitable misconfigurations
+    \item Compare results with prior academic findings
+\end{enumerate}
+
+%==============================================================================
+\section{Methodology}
+%==============================================================================
+
+\subsection{Test Infrastructure}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Component} & \textbf{Configuration} \\
+\midrule
+Sending Domain & \texttt{TODO: domain name} \\
+Sending Tool & \texttt{swaks} (Swiss Army Knife for SMTP) \\
+Network & Grenoble INP VPN (non-blacklisted IP range) \\
+DNS Provider & \texttt{TODO: provider name} \\
+DKIM Key Size & \texttt{TODO: 1024/2048 bits} \\
+Test Period & \texttt{TODO: dates} \\
+\bottomrule
+\end{tabular}
+\caption{Test infrastructure configuration}
+\end{table}
+
+Emails were sent directly from local machines using \texttt{swaks}, bypassing any intermediate MTA. The university VPN provided a clean IP address not present on major spam blacklists (RBLs), avoiding reputation-based filtering that would confound authentication test results.
+
+\subsection{DNS Configuration}
+
+Base records used across scenarios (modified per-test):
+
+\begin{lstlisting}
+; SPF
+TODO: base SPF record
+
+; DKIM
+TODO: selector._domainkey.domain TXT "v=DKIM1; k=rsa; p=..."
+
+; DMARC
+TODO: _dmarc.domain TXT "v=DMARC1; p=none; rua=..."
+\end{lstlisting}
+
+\subsection{Measurement Protocol}
+
+For each scenario:
+\begin{enumerate}[noitemsep]
+    \item Configure DNS records as specified
+    \item Wait for propagation (\texttt{TODO: X minutes})
+    \item Send \texttt{TODO: N} test emails per provider
+    \item Record delivery outcome, headers, UI presentation
+    \item Collect DMARC aggregate reports after 24-48h
+\end{enumerate}
+
+\noindent\textbf{Tools used:}
+\begin{itemize}[noitemsep]
+    \item \texttt{swaks} — direct SMTP sending with full header control
+    \item \texttt{opendkim-testkey} / \texttt{openssl} — DKIM key generation and verification
+    \item \texttt{dig} / \texttt{nslookup} — DNS record verification
+    \item TODO: DMARC report parser (if used)
+\end{itemize}
+
+\noindent\textbf{Example swaks invocation:}
+\begin{lstlisting}[language=bash]
+swaks --to recipient@gmail.com \
+      --from sender@testdomain.com \
+      --server gmail-smtp-in.l.google.com \
+      --header "Subject: Test Scenario X" \
+      --header "Reply-To: other@example.com" \
+      --body "Test message body" \
+      --h-From "Display Name <sender@testdomain.com>"
+\end{lstlisting}
+
+For DKIM-signed messages:
+\begin{lstlisting}[language=bash]
+swaks --to recipient@gmail.com \
+      --from sender@testdomain.com \
+      --server gmail-smtp-in.l.google.com \
+      --header "Subject: DKIM Test" \
+      --dkim \
+      --dkim-key /path/to/private.key \
+      --dkim-selector s1 \
+      --dkim-domain testdomain.com
+\end{lstlisting}
+
+%==============================================================================
+\section{Results}
+%==============================================================================
+
+Results organized by scenario category. Each subsection documents expected vs.\ observed behavior across providers.
+
+%------------------------------------------------------------------------------
+\subsection{SPF Policy Scenarios}
+%------------------------------------------------------------------------------
+
+\subsubsection{Scenario 1: SPF +all Permissive Policy}
+
+\textbf{Setup:} SPF record with \texttt{+all}, no DKIM, DMARC \texttt{p=none}.
+
+\begin{lstlisting}
+SPF: TODO: actual record used
+DMARC: TODO: actual record used
+\end{lstlisting}
+
+\textbf{Expected:} SPF=pass for any IP. DMARC=pass via SPF alignment.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{SPF} & \textbf{DMARC} & \textbf{Delivery} & \textbf{UI Warning} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 1 results}
+\end{table}
+
+\textbf{Observations:} TODO: Notable behaviors, anomalies.
+
+%---
+
+\subsubsection{Scenario 2: SPF -all with Unauthorized IP}
+
+\textbf{Setup:} Strict SPF (\texttt{-all}), send from non-listed IP, DMARC \texttt{p=reject}.
+
+\begin{lstlisting}
+SPF: TODO: actual record
+DMARC: TODO: actual record
+Sending IP: TODO
+\end{lstlisting}
+
+\textbf{Expected:} SPF=fail, DMARC=fail, message rejected or quarantined.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{SPF} & \textbf{DMARC} & \textbf{Delivery} & \textbf{SMTP Response} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 2 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 3: SPF \textasciitilde all Softfail}
+
+\textbf{Setup:} SPF with \texttt{\textasciitilde all}, unauthorized IP, DMARC \texttt{p=quarantine}.
+
+\begin{lstlisting}
+SPF: TODO
+DMARC: TODO
+\end{lstlisting}
+
+\textbf{Expected:} SPF=softfail, DMARC applies quarantine.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{SPF} & \textbf{DMARC} & \textbf{Delivery} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 3 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 4: SPF ?all Neutral}
+
+\textbf{Setup:} SPF \texttt{?all}, DMARC \texttt{p=quarantine}.
+
+\begin{lstlisting}
+SPF: TODO
+DMARC: TODO
+\end{lstlisting}
+
+\textbf{Expected:} SPF=neutral, no alignment contribution, DMARC likely fails.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{SPF} & \textbf{DMARC} & \textbf{Delivery} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 4 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 5: Missing SPF Record}
+
+\textbf{Setup:} No SPF published, DMARC \texttt{p=reject}, no DKIM.
+
+\begin{lstlisting}
+SPF: (none)
+DMARC: TODO
+\end{lstlisting}
+
+\textbf{Expected:} SPF=none, DMARC fails (no alignment possible).
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{SPF} & \textbf{DMARC} & \textbf{Delivery} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 5 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 6: SPF Exceeding 10 DNS Lookups}
+
+\textbf{Setup:} SPF with 11+ include mechanisms, triggers PermError.
+
+\begin{lstlisting}
+SPF: TODO: record with excessive includes
+DMARC: TODO
+\end{lstlisting}
+
+\textbf{Expected:} SPF=permerror, tests fail-open vs fail-closed behavior.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{SPF} & \textbf{DMARC} & \textbf{Delivery} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 6 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 7: Invalid SPF Syntax}
+
+\textbf{Setup:} Malformed SPF (missing \texttt{v=}).
+
+\begin{lstlisting}
+SPF: TODO: malformed record
+DMARC: TODO
+\end{lstlisting}
+
+\textbf{Expected:} SPF=permerror or none, tests parser strictness.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{SPF} & \textbf{DMARC} & \textbf{Delivery} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 7 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%------------------------------------------------------------------------------
+\subsection{DMARC Policy Scenarios}
+%------------------------------------------------------------------------------
+
+\subsubsection{Scenario 8: DMARC p=none, Both SPF and DKIM Fail}
+
+\textbf{Setup:} Both mechanisms fail, DMARC in monitoring mode.
+
+\begin{lstlisting}
+SPF: TODO
+DKIM: (invalid/missing signature)
+DMARC: v=DMARC1; p=none; ...
+\end{lstlisting}
+
+\textbf{Expected:} DMARC=fail but no enforcement; delivery depends on provider heuristics.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{DMARC} & \textbf{Delivery} & \textbf{UI Warning} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 8 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 9: DMARC p=reject pct=0}
+
+\textbf{Setup:} Policy appears strict but \texttt{pct=0} disables enforcement.
+
+\begin{lstlisting}
+DMARC: v=DMARC1; p=reject; pct=0; ...
+\end{lstlisting}
+
+\textbf{Expected:} No rejection (0\% sampling), effectively \texttt{p=none}.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{DMARC} & \textbf{Policy Applied} & \textbf{Delivery} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 9 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 10: DMARC p=quarantine pct=50}
+
+\textbf{Setup:} 50\% sampling for quarantine policy.
+
+\begin{lstlisting}
+DMARC: v=DMARC1; p=quarantine; pct=50; ...
+\end{lstlisting}
+
+\textbf{Expected:} ~50\% quarantined, ~50\% treated as \texttt{p=none}.
+
+\textbf{Test volume:} TODO: N messages per provider.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Provider} & \textbf{Total Sent} & \textbf{Quarantined} & \textbf{Inbox} \\
+\midrule
+Gmail & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 10 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 11: Subdomain Policy (sp=reject, p=none)}
+
+\textbf{Setup:} Org domain has \texttt{p=none}, subdomain policy \texttt{sp=reject}.
+
+\begin{lstlisting}
+DMARC (testdomain.com): v=DMARC1; p=none; sp=reject; ...
+Sending From: mail.testdomain.com
+\end{lstlisting}
+
+\textbf{Expected:} Subdomain mail rejected, org domain mail delivered.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Provider} & \textbf{Org Domain} & \textbf{Subdomain} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 11 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%------------------------------------------------------------------------------
+\subsection{SPF-DKIM-DMARC Alignment Scenarios}
+%------------------------------------------------------------------------------
+
+\subsubsection{Scenario 12: SPF Aligned, DKIM Misaligned}
+
+\textbf{Setup:} SPF passes and aligns; DKIM passes but \texttt{d=} differs from From.
+
+\begin{lstlisting}
+SPF: passes, aligned
+DKIM: d=other-domain.com (misaligned)
+From: sender@testdomain.com
+\end{lstlisting}
+
+\textbf{Expected:} DMARC=pass via SPF.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{SPF} & \textbf{DKIM} & \textbf{DMARC} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 12 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 13: SPF Fail, DKIM Aligned}
+
+\textbf{Setup:} SPF fails (forwarding simulation), DKIM passes and aligns.
+
+\begin{lstlisting}
+MAIL FROM: bounce@forwarder.com
+From: sender@testdomain.com
+DKIM: d=testdomain.com (aligned)
+\end{lstlisting}
+
+\textbf{Expected:} DMARC=pass via DKIM.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{SPF} & \textbf{DKIM} & \textbf{DMARC} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 13 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 14: Both Pass, Neither Aligned}
+
+\textbf{Setup:} SPF and DKIM pass for attacker.com, From header spoofs victim.com.
+
+\begin{lstlisting}
+MAIL FROM: sender@attacker.com
+From: ceo@victim.com
+DKIM: d=attacker.com
+victim.com DMARC: p=reject
+\end{lstlisting}
+
+\textbf{Expected:} DMARC=fail for victim.com, reject enforced.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{SPF} & \textbf{DKIM} & \textbf{DMARC} & \textbf{Delivery} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 14 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 15: Relaxed vs Strict Alignment}
+
+\textbf{Setup:} Compare \texttt{aspf=r/adkim=r} vs \texttt{aspf=s/adkim=s} with subdomain sender.
+
+\begin{lstlisting}
+MAIL FROM: sender@mail.testdomain.com
+From: sender@testdomain.com
+\end{lstlisting}
+
+\textbf{Expected:} Relaxed passes, strict fails.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Provider} & \textbf{Relaxed Result} & \textbf{Strict Result} \\
+\midrule
+Gmail & TODO & TODO \\
+iCloud & TODO & TODO \\
+Yahoo & TODO & TODO \\
+Outlook & TODO & TODO \\
+ProtonMail & TODO & TODO \\
+AOL & TODO & TODO \\
+Zoho & TODO & TODO \\
+GMX & TODO & TODO \\
+Mail.ru & TODO & TODO \\
+Fastmail & TODO & TODO \\
+Tutamail & TODO & TODO \\
+Laposte & TODO & TODO \\
+Mail.com & TODO & TODO \\
+Grenoble INP & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 15 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%------------------------------------------------------------------------------
+\subsection{DMARC Misconfiguration Scenarios}
+%------------------------------------------------------------------------------
+
+\subsubsection{Scenario 16: Multiple DMARC Records}
+
+\textbf{Setup:} Two conflicting DMARC TXT records published.
+
+\begin{lstlisting}
+Record 1: v=DMARC1; p=reject; ...
+Record 2: v=DMARC1; p=none; ...
+\end{lstlisting}
+
+\textbf{Expected:} DMARC ignored (invalid per RFC 7489).
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Provider} & \textbf{DMARC Result} & \textbf{Policy Applied} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 16 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 17: Malformed DMARC Record}
+
+\textbf{Setup:} DMARC record missing \texttt{v=} tag.
+
+\begin{lstlisting}
+DMARC: DMARC1; p=reject; ...  (invalid)
+\end{lstlisting}
+
+\textbf{Expected:} Record ignored, treated as no DMARC.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Provider} & \textbf{DMARC Result} & \textbf{Delivery} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 17 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%------------------------------------------------------------------------------
+\subsection{Header Manipulation Scenarios}
+%------------------------------------------------------------------------------
+
+\subsubsection{Scenario 18: Spoofed Sender Header (FakeBehalf)}
+
+\textbf{Setup:} Valid auth for attacker.com, spoofed \texttt{Sender:} header.
+
+\begin{lstlisting}
+From: legit@attacker.com
+Sender: ceo@victim-company.com
+\end{lstlisting}
+
+\textbf{Expected:} Auth passes; test UI display of Sender field.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Provider} & \textbf{Sender Displayed?} & \textbf{Warning?} & \textbf{Notes} \\
+\midrule
+Gmail (Web) & TODO & TODO & TODO \\
+Gmail (Mobile) & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 18 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 22: Friendly-From Display Name Spoofing}
+
+\textbf{Setup:} Display name mimics target, actual address is attacker's.
+
+\begin{lstlisting}
+From: "IT Support <helpdesk@company.com>" <phishing@attacker.com>
+\end{lstlisting}
+
+\textbf{Expected:} Auth passes; test what users see.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Provider} & \textbf{Display Shown} & \textbf{Address Visible?} & \textbf{Warning?} \\
+\midrule
+Gmail (Web) & TODO & TODO & TODO \\
+Gmail (Mobile) & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 22 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 23: Reply-To Manipulation}
+
+\textbf{Setup:} Valid From, \texttt{Reply-To:} points to attacker.
+
+\begin{lstlisting}
+From: sender@legitimate.com
+Reply-To: finance@attacker-controlled.com
+\end{lstlisting}
+
+\textbf{Expected:} Auth passes; test reply behavior and warnings.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Provider} & \textbf{Reply-To Shown?} & \textbf{Warning on Reply?} & \textbf{Notes} \\
+\midrule
+Gmail & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 23 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%------------------------------------------------------------------------------
+\subsection{Forwarding and ARC Scenarios}
+%------------------------------------------------------------------------------
+
+\subsubsection{Scenario 19: Forwarding, SPF Breaks, No ARC}
+
+\textbf{Setup:} Simulated forward; DKIM intact, SPF fails, no ARC headers.
+
+\begin{lstlisting}
+Original: sender@testdomain.com
+Forwarded via: forwarder.net (not in SPF)
+ARC: (none)
+\end{lstlisting}
+
+\textbf{Expected:} DMARC passes via DKIM if body unchanged.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{SPF} & \textbf{DKIM} & \textbf{DMARC} & \textbf{Delivery} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 19 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 20: Forwarding with ARC Chain}
+
+\textbf{Setup:} Same as Scenario 19, but with valid ARC headers.
+
+\begin{lstlisting}
+ARC-Seal: i=1; cv=none; d=forwarder.net; ...
+ARC-Message-Signature: i=1; d=forwarder.net; ...
+ARC-Authentication-Results: i=1; dkim=pass; spf=pass; dmarc=pass
+\end{lstlisting}
+
+\textbf{Expected:} Providers trusting ARC should honor preserved results.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Provider} & \textbf{ARC Validated?} & \textbf{DMARC Override?} & \textbf{Delivery} \\
+\midrule
+Gmail & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 20 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%------------------------------------------------------------------------------
+\subsection{IDN and Lookalike Domain Scenarios}
+%------------------------------------------------------------------------------
+
+\subsubsection{Scenario 21: IDN Homograph Attack}
+
+\textbf{Setup:} IDN domain visually similar to target, fully authenticated.
+
+\begin{lstlisting}
+Domain: xn--[punycode].com (displays as lookalike)
+SPF: pass
+DKIM: pass
+DMARC: pass
+\end{lstlisting}
+
+\textbf{Expected:} All auth passes; test UI display (Unicode vs Punycode).
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Provider} & \textbf{Display Format} & \textbf{Warning?} & \textbf{Notes} \\
+\midrule
+Gmail (Web) & TODO & TODO & TODO \\
+Gmail (Mobile) & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 21 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%------------------------------------------------------------------------------
+\subsection{Reporting and Edge Cases}
+%------------------------------------------------------------------------------
+
+\subsubsection{Scenario 24: DMARC Report Destination Verification}
+
+\textbf{Setup:} DMARC \texttt{rua=} points to external domain without authorization record.
+
+\begin{lstlisting}
+DMARC: v=DMARC1; p=reject; rua=mailto:reports@external.com
+Authorization: (none at external.com)
+\end{lstlisting}
+
+\textbf{Expected:} Compliant receivers should not send reports without EDV.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Provider} & \textbf{Report Sent?} & \textbf{EDV Check Performed?} \\
+\midrule
+Gmail & TODO & TODO \\
+iCloud & TODO & TODO \\
+Yahoo & TODO & TODO \\
+Outlook & TODO & TODO \\
+ProtonMail & TODO & TODO \\
+AOL & TODO & TODO \\
+Zoho & TODO & TODO \\
+GMX & TODO & TODO \\
+Mail.ru & TODO & TODO \\
+Fastmail & TODO & TODO \\
+Tutamail & TODO & TODO \\
+Laposte & TODO & TODO \\
+Mail.com & TODO & TODO \\
+Grenoble INP & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 24 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%---
+
+\subsubsection{Scenario 25: NULL Envelope Sender}
+
+\textbf{Setup:} \texttt{MAIL FROM:<>} (bounce message format).
+
+\begin{lstlisting}
+MAIL FROM: <>
+From: mailer-daemon@testdomain.com
+\end{lstlisting}
+
+\textbf{Expected:} SPF checks HELO; DMARC may not apply.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Provider} & \textbf{SPF Result} & \textbf{DMARC Applied?} & \textbf{Delivery} \\
+\midrule
+Gmail & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Scenario 25 results}
+\end{table}
+
+\textbf{Observations:} TODO
+
+%==============================================================================
+\section{Discussion}
+%==============================================================================
+
+\subsection{Provider Comparison Summary}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Provider} & \textbf{SPF Strict?} & \textbf{DMARC Enforced?} & \textbf{ARC Support?} & \textbf{UI Warnings?} \\
+\midrule
+Gmail & TODO & TODO & TODO & TODO \\
+iCloud & TODO & TODO & TODO & TODO \\
+Yahoo & TODO & TODO & TODO & TODO \\
+Outlook & TODO & TODO & TODO & TODO \\
+ProtonMail & TODO & TODO & TODO & TODO \\
+AOL & TODO & TODO & TODO & TODO \\
+Zoho & TODO & TODO & TODO & TODO \\
+GMX & TODO & TODO & TODO & TODO \\
+Mail.ru & TODO & TODO & TODO & TODO \\
+Fastmail & TODO & TODO & TODO & TODO \\
+Tutamail & TODO & TODO & TODO & TODO \\
+Laposte & TODO & TODO & TODO & TODO \\
+Mail.com & TODO & TODO & TODO & TODO \\
+Grenoble INP & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Provider behavior summary}
+\end{table}
+
+\subsection{Notable Findings}
+
+\begin{itemize}[noitemsep]
+    \item TODO: Key finding 1
+    \item TODO: Key finding 2
+    \item TODO: Key finding 3
+    \item TODO: Unexpected behaviors
+    \item TODO: Comparison with prior work (Hu \& Wang 2018, Shen et al. 2021)
+\end{itemize}
+
+\subsection{Security Implications}
+
+TODO: Summarize exploitable weaknesses discovered.
+
+TODO: Which scenarios represent real-world attack vectors?
+
+TODO: Provider-specific risks.
+
+\subsection{Limitations}
+
+\begin{itemize}[noitemsep]
+    \item TODO: Sample size limitations
+    \item TODO: Temporal factors (provider updates)
+    \item TODO: Account type differences (free vs paid)
+    \item TODO: Geographic/regional variations
+\end{itemize}
+
+%==============================================================================
+\section{Conclusion}
+%==============================================================================
+
+TODO: 3-5 sentence summary of main results.
+
+TODO: Which providers performed best/worst?
+
+TODO: Recommendations for domain administrators.
+
+TODO: Future work directions.
+
+%==============================================================================
+\section*{Acknowledgments}
+%==============================================================================
+
+TODO: If applicable.
+
+%==============================================================================
+\begin{thebibliography}{99}
+
+\bibitem{hu2018endtoend}
+H.~Hu and G.~Wang.
+\newblock End-to-End Measurements of Email Spoofing Attacks.
+\newblock In \emph{USENIX Security}, 2018.
+
+\bibitem{chen2020composition}
+J.~Chen, V.~Paxson, and J.~Jiang.
+\newblock Composition Kills: A Case Study of Email Sender Authentication.
+\newblock In \emph{USENIX Security}, 2020.
+
+\bibitem{shen2021weaklinks}
+K.~Shen et al.
+\newblock Weak Links in Authentication Chains: A Large-scale Analysis of Email Sender Spoofing Attacks.
+\newblock In \emph{USENIX Security}, 2021.
+
+\bibitem{wang2022dkim}
+C.~Wang et al.
+\newblock A Large-scale and Longitudinal Measurement Study of DKIM Deployment.
+\newblock In \emph{USENIX Security}, 2022.
+
+\bibitem{ashiq2023dmarc}
+M.I.~Ashiq et al.
+\newblock You've Got Report: Measurement and Security Implications of DMARC Reporting.
+\newblock In \emph{USENIX Security}, 2023.
+
+\bibitem{ma2024fakebehalf}
+J.~Ma et al.
+\newblock FakeBehalf: Imperceptible Email Spoofing Attacks against the Delegation Mechanism.
+\newblock In \emph{USENIX Security}, 2024.
+
+\bibitem{wang2022arc}
+C.~Wang and G.~Wang.
+\newblock Revisiting Email Forwarding Security under the Authenticated Received Chain Protocol.
+\newblock In \emph{ACM WWW}, 2022.
+
+\bibitem{wang2025smtp}
+C.~Wang et al.
+\newblock Email Spoofing with SMTP Smuggling: How the Shared Email Infrastructures Magnify this Vulnerability.
+\newblock In \emph{USENIX Security}, 2025.
+
+\bibitem{rfc7208}
+S.~Kitterman.
+\newblock Sender Policy Framework (SPF).
+\newblock RFC 7208, 2014.
+
+\bibitem{rfc6376}
+D.~Crocker et al.
+\newblock DomainKeys Identified Mail (DKIM) Signatures.
+\newblock RFC 6376, 2011.
+
+\bibitem{rfc7489}
+M.~Kucherawy and E.~Zwicky.
+\newblock Domain-based Message Authentication, Reporting, and Conformance (DMARC).
+\newblock RFC 7489, 2015.
+
+\bibitem{rfc8617}
+K.~Andersen et al.
+\newblock The Authenticated Received Chain (ARC) Protocol.
+\newblock RFC 8617, 2019.
+
+\end{thebibliography}
+
+%==============================================================================
+\appendix
+\section{Sample Headers}
+%==============================================================================
+
+\subsection{Scenario X: Authentication-Results Example}
+
+\begin{lstlisting}
+TODO: Paste representative Authentication-Results header
+\end{lstlisting}
+
+\subsection{DMARC Aggregate Report Sample}
+
+\begin{lstlisting}
+TODO: Paste relevant excerpt from DMARC XML report
+\end{lstlisting}
+
+%==============================================================================
+\section{Test Scripts}
+%==============================================================================
+
+\subsection{Batch Testing Script}
+
+\begin{lstlisting}[language=bash]
+#!/bin/bash
+# send_test.sh - Batch email testing script
+
+DOMAIN="testdomain.com"
+DKIM_KEY="/path/to/dkim-private.key"
+DKIM_SELECTOR="s1"
+
+# Target providers (MX records)
+declare -A PROVIDERS=(
+    ["gmail"]="gmail-smtp-in.l.google.com"
+    ["yahoo"]="mta5.am0.yahoodns.net"
+    ["outlook"]="outlook-com.olc.protection.outlook.com"
+    ["protonmail"]="mail.protonmail.ch"
+    # TODO: Add remaining providers
+)
+
+# Scenario 1: SPF +all
+send_scenario_1() {
+    local provider=$1
+    local mx=$2
+    local recipient="testaccount@${provider}.com"  # TODO: actual addresses
+    
+    swaks --to "$recipient" \
+          --from "test@${DOMAIN}" \
+          --server "$mx" \
+          --header "Subject: [Scenario 1] SPF +all Test" \
+          --header "X-Test-ID: scenario1-$(date +%s)" \
+          --body "SPF +all policy test message"
+}
+
+# Scenario with DKIM
+send_with_dkim() {
+    local recipient=$1
+    local mx=$2
+    
+    swaks --to "$recipient" \
+          --from "test@${DOMAIN}" \
+          --server "$mx" \
+          --dkim \
+          --dkim-key "$DKIM_KEY" \
+          --dkim-selector "$DKIM_SELECTOR" \
+          --dkim-domain "$DOMAIN" \
+          --header "Subject: DKIM Signed Test" \
+          --body "DKIM test message"
+}
+
+# Main loop
+for provider in "${!PROVIDERS[@]}"; do
+    echo "Testing: $provider"
+    send_scenario_1 "$provider" "${PROVIDERS[$provider]}"
+    sleep 10  # Rate limiting
+done
+\end{lstlisting}
+
+\subsection{DKIM Key Generation}
+
+\begin{lstlisting}[language=bash]
+# Generate 2048-bit RSA key pair
+openssl genrsa -out dkim-private.key 2048
+openssl rsa -in dkim-private.key -pubout -out dkim-public.key
+
+# Format public key for DNS (remove headers, join lines)
+grep -v "^-" dkim-public.key | tr -d '\n'
+
+# DNS record format:
+# s1._domainkey.testdomain.com TXT "v=DKIM1; k=rsa; p=<public-key>"
+\end{lstlisting}
+
+\end{document}
