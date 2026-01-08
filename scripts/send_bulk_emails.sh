@@ -14,6 +14,7 @@ NC='\033[0m' # No Color
 DELAY=1
 EMAIL_LIST=""
 FROM_EMAIL=""
+H_FROM=""
 SUBJECT=""
 BODY=""
 EHLO_HOST=""
@@ -30,12 +31,13 @@ show_help() {
     echo ""
     echo -e "${YELLOW}Paramètres obligatoires:${NC}"
     echo "  --list FILE          Fichier contenant la liste des emails"
-    echo "  --from EMAIL         Adresse email de l'expéditeur"
+    echo "  --from EMAIL         Adresse email de l'expéditeur (envelope from)"
     echo "  --subject SUBJECT    Sujet de l'email"
     echo "  --body MESSAGE       Corps du message"
     echo "  --ehlo HOST          Nom d'hôte pour EHLO/HELO"
     echo ""
     echo -e "${YELLOW}Paramètres optionnels:${NC}"
+    echo "  --h-from EMAIL       Adresse email pour le header From (si différent de --from)"
     echo "  --server SERVER      Serveur SMTP (ex: smtp.gmail.com:587)"
     echo "  --port PORT          Port SMTP"
     echo "  --auth-user USER     Utilisateur pour authentification"
@@ -64,6 +66,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --from)
             FROM_EMAIL="$2"
+            shift 2
+            ;;
+        --h-from)
+            H_FROM="$2"
             shift 2
             ;;
         --subject)
@@ -151,6 +157,7 @@ fi
 echo -e "\n${YELLOW}=== Configuration ===${NC}"
 echo "Liste: $EMAIL_LIST"
 echo "FROM: $FROM_EMAIL"
+[ -n "$H_FROM" ] && echo "H-FROM: $H_FROM"
 echo "SUBJECT: $SUBJECT"
 echo "EHLO: $EHLO_HOST"
 echo "BODY: $BODY"
@@ -176,6 +183,7 @@ LOG_FILE="send_log_$(date '+%Y%m%d_%H%M%S').txt"
 echo "Log des envois - $(date)" > "$LOG_FILE"
 echo "Configuration:" >> "$LOG_FILE"
 echo "FROM: $FROM_EMAIL" >> "$LOG_FILE"
+[ -n "$H_FROM" ] && echo "H-FROM: $H_FROM" >> "$LOG_FILE"
 echo "SUBJECT: $SUBJECT" >> "$LOG_FILE"
 echo "EHLO: $EHLO_HOST" >> "$LOG_FILE"
 [ -n "$SMTP_SERVER" ] && echo "Server: $SMTP_SERVER" >> "$LOG_FILE"
@@ -199,7 +207,12 @@ while IFS= read -r email || [ -n "$email" ]; do
     echo -e "${YELLOW}[$TOTAL] Envoi à: $email${NC}"
     
     # Construction de la commande swaks
-    SWAKS_CMD="swaks --to \"$email\" --from \"$FROM_EMAIL\" --header \"Subject: $SUBJECT\" --ehlo \"$EHLO_HOST\""
+    # Si H_FROM est spécifié, on utilise --h-from, sinon on utilise FROM_EMAIL
+    if [ -n "$H_FROM" ]; then
+        SWAKS_CMD="swaks --to \"$email\" --from \"$FROM_EMAIL\" --h-from \"$H_FROM\" --header \"Subject: $SUBJECT\" --ehlo \"$EHLO_HOST\""
+    else
+        SWAKS_CMD="swaks --to \"$email\" --from \"$FROM_EMAIL\" --header \"Subject: $SUBJECT\" --ehlo \"$EHLO_HOST\""
+    fi
     
     # Ajout du corps avec date
     MESSAGE_BODY="$BODY
